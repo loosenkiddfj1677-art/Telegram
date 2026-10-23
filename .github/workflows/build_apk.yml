@@ -1,0 +1,50 @@
+name: Build FCGram APK
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. 检出源码与子模块
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: 2. 配置 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 3. 自动生成签名与占位配置文件
+        run: |
+          mkdir -p TMessagesProj/config
+          keytool -genkey -v -keystore TMessagesProj/config/release.keystore -alias release -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=FCGram, OU=Dev, O=FCGram, L=Tokyo, S=Tokyo, C=JP"
+          cat << 'EOF' > TMessagesProj/google-services.json
+          {
+            "project_info": { "project_number": "123456789000", "project_id": "fcgram-custom-app" },
+            "client": [{
+              "client_info": {
+                "mobilesdk_app_id": "1:123456789000:android:abcdef1234567890",
+                "android_client_info": { "package_name": "org.mygram.messenger" }
+              }
+            }],
+            "configuration_version": "1"
+          }
+          EOF
+          cp TMessagesProj/google-services.json TMessagesProj_App/google-services.json || true
+
+      - name: 4. 编译打包 (耗时较长请耐心等待)
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleAfatDebug --stacktrace
+
+      - name: 5. 上传安装包
+        uses: actions/upload-artifact@v4
+        with:
+          name: FCGram-Android-APK
+          path: "**/*build/outputs/apk/**/*.apk"
